@@ -9,7 +9,6 @@ from typing import List
 app = FastAPI()
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-# Globals for FAISS
 index = None
 quotes = []
 
@@ -17,17 +16,29 @@ class Quote(BaseModel):
     id: int
     text: str
     author: str
-    tags: List[str] = []
+    category: str
+    mood: List[str]
 
 @app.on_event("startup")
 def load_index():
     global index, quotes
-    # Load quotes from CSV
-    df = pd.read_csv("quotes.csv")  # Place your CSV in the root directory
-    quotes = df.to_dict(orient="records")
+    # Load your CSV file
+    df = pd.read_csv("final_quotes_with_5000_additional.csv")
+    # Add an id column if not present
+    if "id" not in df.columns:
+        df["id"] = range(len(df))
+    # Standardize columns
+    df = df.rename(columns={
+        "Quote": "text",
+        "Author": "author",
+        "Category": "category",
+        "Mood": "mood"
+    })
+    # Convert mood to list
+    df["mood"] = df["mood"].fillna("").apply(lambda x: [m.strip() for m in str(x).split("|") if m.strip()])
+    quotes = df[["id", "text", "author", "category", "mood"]].to_dict(orient="records")
     # Compute embeddings
     embeddings = model.encode([q["text"] for q in quotes], show_progress_bar=True)
-    # Build FAISS index
     index = faiss.IndexFlatL2(embeddings.shape[1])
     index.add(np.array(embeddings).astype('float32'))
 
